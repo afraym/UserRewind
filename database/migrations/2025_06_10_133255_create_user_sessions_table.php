@@ -13,6 +13,12 @@ return new class extends Migration
     {
         Schema::create('user_sessions', function (Blueprint $table) {
             $table->id();
+            $table->string('session_id')->unique();
+            $table->ipAddress('ip')->nullable();
+            $table->string('device_hash')->nullable();
+            $table->string('origin')->nullable(); // Website origin
+            $table->json('paths')->nullable();    // Array of visited paths
+            $table->json('events');
             $table->timestamps();
         });
     }

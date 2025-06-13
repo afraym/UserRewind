@@ -14,12 +14,9 @@ class UserSessionController extends Controller
         // Validate the incoming data
         $request->validate([
             'events' => 'required|array',
+            'origin' => 'nullable|string',
+            'paths' => 'nullable|array',
         ]);
-
-        // Filter out null or empty values from the events array
-        $newEvents = array_filter($request->input('events'), function ($event) {
-            return !is_null($event) && $event !== '';
-        });
 
         // Get the user's IP address
         $realIp = $request->header('CF-Connecting-IP')
@@ -30,52 +27,53 @@ class UserSessionController extends Controller
         $deviceInfo = $request->header('User-Agent');
         $deviceHash = md5($deviceInfo); // Hash the device info to make it file-system safe
 
-        // Construct the file name using IP address and device hash
-        $filePath = "sessions/{$realIp}_{$deviceHash}.json";
+        // Construct the session ID using IP address and device hash
+        $sessionId = "{$realIp}_{$deviceHash}";
 
-        // Retrieve existing data if the file exists
-        $existingData = Storage::exists($filePath) ? json_decode(Storage::get($filePath), true) : [];
+        $origin = $request->input('origin', $request->header('Origin'));
+        $paths = $request->input('paths', []);
 
-        // Ensure both are arrays and merge without duplicating events
-        if (!is_array($existingData)) {
-            $existingData = [];
-        }
+        // Filter and validate the events array
+        $newEvents = array_filter($request->input('events'), function ($event) {
+            return is_array($event) || is_object($event);
+        });
 
-        // Optionally, prevent duplicates by using array_unique with serialization
-        $mergedData = array_merge($existingData, $newEvents);
-        $mergedData = array_map("unserialize", array_unique(array_map("serialize", $mergedData)));
+        // Create or update the user session
+        $session = UserSession::firstOrCreate(
+            ['session_id' => $sessionId],
+            [
+                'ip' => $realIp,
+                'device_hash' => $deviceHash,
+                'origin' => $origin,
+                'paths' => [],
+                'events' => [],
+            ]
+        );
 
-        // Save the merged data back to the file
-        Storage::put($filePath, json_encode($mergedData));
+        // Merge and deduplicate events
+        $mergedEvents = array_merge($session->events ?? [], $newEvents);
+        $mergedEvents = array_map("unserialize", array_unique(array_map("serialize", $mergedEvents)));
+
+        // Merge and deduplicate paths
+        $mergedPaths = array_unique(array_merge($session->paths ?? [], $paths));
+
+        $session->events = $mergedEvents;
+        $session->origin = $origin;
+        $session->paths = $mergedPaths;
+        $session->save();
 
         return response()->json(['message' => 'Session recorded successfully']);
     }
 
     public function replay($sessionId)
     {
-        $filePath = "sessions/{$sessionId}.json";
+        $session = UserSession::where('session_id', $sessionId)->first();
 
-        // Check if the session file exists
-        if (!Storage::exists($filePath)) {
+        if (!$session || empty($session->events)) {
             return response()->json(['message' => 'Session not found'], 404);
         }
 
-        // Retrieve the session events
-        $events = json_decode(Storage::get($filePath), true);
-
-        // Filter out invalid events
-        $events = array_filter($events, function ($event) {
-            // Ensure the event is an array or object and contains required keys
-            return is_array($event) || is_object($event);
-        });
-
-        // Check if the session file is empty or invalid
-        if (empty($events)) {
-            return response()->json(['message' => 'No valid events found in the session'], 404);
-        }
-
-        // Return the events as JSON
-        return response()->json(['events' => $events], 200, ['Content-Type' => 'application/json']);
+        return response()->json(['events' => $session->events]);
     }
     /**
      * Display a listing of the resource.
