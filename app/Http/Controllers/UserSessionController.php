@@ -22,14 +22,16 @@ class UserSessionController extends Controller
         });
 
         // Get the user's IP address
-        $ipAddress = $request->ip();
+        $realIp = $request->header('CF-Connecting-IP')
+        ?? $request->header('X-Forwarded-For')
+        ?? $request->ip();
 
         // Get the user's device information (User-Agent)
         $deviceInfo = $request->header('User-Agent');
         $deviceHash = md5($deviceInfo); // Hash the device info to make it file-system safe
 
         // Construct the file name using IP address and device hash
-        $filePath = "sessions/{$ipAddress}_{$deviceHash}.json";
+        $filePath = "sessions/{$realIp}_{$deviceHash}.json";
 
         // Retrieve existing data if the file exists
         $existingData = Storage::exists($filePath) ? json_decode(Storage::get($filePath), true) : [];
@@ -133,10 +135,10 @@ class UserSessionController extends Controller
     public function viewReplay(Request $request)
     {
         // Generate or retrieve the session ID
-        $ipAddress = $request->ip();
-        $deviceInfo = $request->header('User-Agent');
-        $deviceHash = md5($deviceInfo); // Hash the device info to make it file-system safe
-        $sessionId = "{$ipAddress}_{$deviceHash}";
+        $sessionId = $request->sessionId;
+        if (empty($sessionId)) {
+            return response()->json(['message' => 'Session ID is required'], 400);
+        }
 
         // Check if the session file exists
         $filePath = "sessions/{$sessionId}.json";
