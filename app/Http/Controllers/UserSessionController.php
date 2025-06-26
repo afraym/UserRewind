@@ -11,58 +11,68 @@ class UserSessionController extends Controller
 
         public function record(Request $request)
     {
-        // Validate the incoming data
-        $request->validate([
-            'events' => 'required|array',
-            'origin' => 'nullable|string',
-            'paths' => 'nullable|array',
-        ]);
+        try {
+            // Validate the incoming data
+            $request->validate([
+                'events' => 'required|array',
+                'origin' => 'nullable|string', 
+                'paths' => 'nullable|array',
+            ]);
 
-        // Get the user's IP address
-        $realIp = $request->header('CF-Connecting-IP')
-        ?? $request->header('X-Forwarded-For')
-        ?? $request->ip();
+            // Get the user's IP address
+            $realIp = $request->header('CF-Connecting-IP')
+                ?? $request->header('X-Forwarded-For')
+                ?? $request->ip();
 
-        // Get the user's device information (User-Agent)
-        $deviceInfo = $request->header('User-Agent');
-        $deviceHash = md5($deviceInfo); // Hash the device info to make it file-system safe
+            // Get the user's device information
+            $deviceInfo = $request->header('User-Agent');
+            $deviceHash = md5($deviceInfo);
 
-        // Construct the session ID using IP address and device hash
-        $sessionId = "{$realIp}_{$deviceHash}";
+            // Construct session ID
+            $sessionId = "{$realIp}_{$deviceHash}";
 
-        $origin = $request->input('origin', $request->header('Origin'));
-        $paths = $request->input('paths', []);
+            $origin = $request->input('origin', $request->header('Origin'));
+            $paths = $request->input('paths', []);
 
-        // Filter and validate the events array
-        $newEvents = array_filter($request->input('events'), function ($event) {
-            return is_array($event) || is_object($event);
-        });
+            // Filter and clean the events array
+            $newEvents = array_map(function($event) {
+                // Ensure each event is an array and remove any problematic spaces in keys
+                if (is_array($event) || is_object($event)) {
+                    return array_combine(
+                        array_map('trim', array_keys((array)$event)),
+                        array_values((array)$event)
+                    );
+                }
+                return null;
+            }, $request->input('events'));
 
-        // Create or update the user session
-        $session = UserSession::firstOrCreate(
-            ['session_id' => $sessionId],
-            [
-                'ip' => $realIp,
-                'device_hash' => $deviceHash,
-                'origin' => $origin,
-                'paths' => [],
-                'events' => [],
-            ]
-        );
+            // Remove null values
+            $newEvents = array_filter($newEvents);
 
-        // Merge and deduplicate events
-        $mergedEvents = array_merge($session->events ?? [], $newEvents);
-        $mergedEvents = array_map("unserialize", array_unique(array_map("serialize", $mergedEvents)));
+            // Create or update session
+            $session = UserSession::updateOrCreate(
+                ['session_id' => $sessionId],
+                [
+                    'ip' => $realIp,
+                    'device_hash' => $deviceHash,
+                    'origin' => $origin,
+                    'paths' => array_values(array_unique($paths)),
+                    'events' => array_values($newEvents) // Ensure sequential array
+                ]
+            );
 
-        // Merge and deduplicate paths
-        $mergedPaths = array_unique(array_merge($session->paths ?? [], $paths));
+            return response()->json([
+                'message' => 'Session recorded successfully',
+                'session_id' => $sessionId
+            ]);
 
-        $session->events = $mergedEvents;
-        $session->origin = $origin;
-        $session->paths = $mergedPaths;
-        $session->save();
-
-        return response()->json(['message' => 'Session recorded successfully']);
+        } catch (\Exception $e) {
+            \Log::error('Session recording error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Error recording session',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function replay($sessionId)
