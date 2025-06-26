@@ -147,10 +147,10 @@ class UserSessionController extends Controller
         }
 
         // Check if the session file exists
-        $filePath = "sessions/{$sessionId}.json";
-        if (!Storage::exists($filePath)) {
-            return response()->json(['message' => 'Session file not found'], 404);
-        }
+        // $filePath = "sessions/{$sessionId}.json";
+        // if (!Storage::exists($filePath)) {
+        //     return response()->json(['message' => 'Session file not found'], 404);
+        // }
 
         // Pass the session ID to the replay view
         return view('replay', ['session_id' => $sessionId]);
