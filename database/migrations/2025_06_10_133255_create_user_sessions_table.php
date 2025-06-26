@@ -9,19 +9,25 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-     public function up()
+    public function up()
     {
-        Schema::table('user_sessions', function (Blueprint $table) {
-            $table->string('file_path')->nullable()->after('paths');
-            $table->dropColumn('events'); // Remove events from DB as they'll be stored in files
+        Schema::create('user_sessions', function (Blueprint $table) {
+            $table->id();
+            $table->string('session_id')->unique();
+            $table->string('ip');
+            $table->string('device_hash');
+            $table->string('origin')->nullable();
+            $table->json('paths')->nullable();
+            $table->string('file_path')->nullable();
+            $table->timestamps();
         });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down()
     {
-        Schema::table('user_sessions', function (Blueprint $table) {
-            $table->json('events')->nullable();
-            $table->dropColumn('file_path');
-        });
+        Schema::dropIfExists('user_sessions');
     }
 };
