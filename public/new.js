@@ -1,29 +1,23 @@
-// Load rrweb script dynamically
-const rrwebScript = document.createElement('script');
-rrwebScript.src = 'https://cdn.jsdelivr.net/npm/rrweb@latest/dist/rrweb.min.js';
-rrwebScript.async = true;
-document.head.appendChild(rrwebScript);
-// Example JavaScript to collect paths and send with events
-let paths = [];
-function trackPath() {
-    if (!paths.includes(window.location.pathname)) {
-        paths.push(window.location.pathname);
-    }
-}
-window.addEventListener('popstate', trackPath);
-window.addEventListener('pushstate', trackPath);
-trackPath(); // Initial path
+    // Initialize rrweb recording
+    let events = [];
+    rrweb.record({
+        emit(event) {
+            events.push(event);
+        },
+    });
 
-// When sending events:
-fetch('/api/session/record', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': '{{ csrf_token() }}',
-    },
-    body: JSON.stringify({
-        events,
-        origin: window.location.origin,
-        paths,
-    }),
-});
+    // Periodically send recorded events to the server
+    setInterval(() => {
+        if (events.length > 0) {
+            fetch('https://tomato.test/api/session/record', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                },
+                body: JSON.stringify({ events }),
+            }).then(() => {
+                events = []; // Clear events after sending
+            });
+        }
+    }, 5000); // Send every 5 seconds

@@ -80,7 +80,15 @@ class UserSessionController extends Controller
      */
     public function index()
     {
-        //
+        // Get all sessions, you can paginate if needed
+        $sessions = UserSession::all();
+
+        // Return as JSON or pass to a view
+        // Example: return as JSON
+        // return response()->json(['sessions' => $sessions]);
+
+        // Or, to pass to a Blade view:
+        return view('sessions.index', ['sessions' => $sessions]);
     }
 
     /**

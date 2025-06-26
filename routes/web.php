@@ -22,3 +22,4 @@ Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name
 
 // Route::post('/session/record', [UserSessionController::class, 'record']);
 Route::get('/session/replay/{sessionId}', [UserSessionController::class, 'viewReplay']);
+Route::get('/sessions', [UserSessionController::class, 'index']);
