@@ -49,7 +49,20 @@ class UserSessionController extends Controller
             // Remove null values
             $newEvents = array_filter($newEvents);
 
-            // Create or update session
+            // Create directory if it doesn't exist
+            $sessionDirectory = storage_path('app/public/sessions');
+            if (!file_exists($sessionDirectory)) {
+                mkdir($sessionDirectory, 0755, true);
+            }
+
+            // Save events to a JSON file
+            $filename = "sessions/{$sessionId}.json";
+            Storage::put($filename, json_encode([
+                'timestamp' => now(),
+                'events' => array_values($newEvents)
+            ], JSON_PRETTY_PRINT));
+
+            // Save session metadata to database
             $session = UserSession::updateOrCreate(
                 ['session_id' => $sessionId],
                 [
@@ -57,7 +70,9 @@ class UserSessionController extends Controller
                     'device_hash' => $deviceHash,
                     'origin' => $origin,
                     'paths' => array_values(array_unique($paths)),
-                    'events' => array_values($newEvents) // Ensure sequential array
+                    'file_path' => $filename,
+                    'created_at' => now(),
+                    'updated_at' => now()
                 ]
             );
 
@@ -77,13 +92,36 @@ class UserSessionController extends Controller
 
     public function replay($sessionId)
     {
-        $session = UserSession::where('session_id', $sessionId)->first();
+        try {
+            $session = UserSession::where('session_id', $sessionId)->first();
 
-        if (!$session || empty($session->events)) {
-            return response()->json(['message' => 'Session not found'], 404);
+            if (!$session) {
+                return response()->json(['message' => 'Session not found'], 404);
+            }
+
+            if (!Storage::exists($session->file_path)) {
+                return response()->json(['message' => 'Session file not found'], 404);
+            }
+
+            $sessionData = json_decode(Storage::get($session->file_path), true);
+
+            return response()->json([
+                'events' => $sessionData['events'],
+                'timestamp' => $sessionData['timestamp'],
+                'metadata' => [
+                    'ip' => $session->ip,
+                    'origin' => $session->origin,
+                    'paths' => $session->paths
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Session replay error: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Error retrieving session',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        return response()->json(['events' => $session->events]);
     }
     /**
      * Display a listing of the resource.

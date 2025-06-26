@@ -6,9 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class UserSession extends Model
 {
-    protected $fillable = ['session_id', 'ip', 'device_hash', 'origin', 'paths', 'events'];
+    protected $fillable = [
+        'session_id',
+        'ip',
+        'device_hash',
+        'origin',
+        'paths',
+        'file_path'
+    ];
+
     protected $casts = [
-        'events' => 'array',
-        'paths' => 'array',
+        'paths' => 'array'
     ];
 }
